@@ -1,0 +1,424 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  KITCHZERO_ADMIN
+  RESTAURANT_ADMIN
+  BRANCH_ADMIN
+}
+
+
+enum WasteType {
+  RAW
+  PRODUCT
+}
+
+enum WasteSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum ActionType {
+  UPDATE_INVENTORY
+  DELETE_INVENTORY
+  UPDATE_WASTE_LOG
+  DELETE_WASTE_LOG
+}
+
+model Tenant {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  branches           Branch[]
+  users              User[]
+  inventoryItems     InventoryItem[]
+  productStockLevels ProductStockLevel[]
+  recipes            Recipe[]
+  productions        Production[]
+  wasteLogs          WasteLog[]
+  approvalRequests   ApprovalRequest[]
+  stockAlerts        StockAlert[]
+  stockUsageHistory  StockUsageHistory[]
+
+  @@map("tenants")
+}
+
+model Branch {
+  id       String @id @default(cuid())
+  name     String
+  address  String
+  tenantId String
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  users              User[]
+  inventoryItems     InventoryItem[]
+  productStockLevels ProductStockLevel[]
+  recipes            Recipe[]
+  productions        Production[]
+  wasteLogs          WasteLog[]
+  approvalRequests   ApprovalRequest[]
+  stockAlerts        StockAlert[]
+  stockUsageHistory  StockUsageHistory[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("branches")
+}
+
+model User {
+  id                 String   @id @default(cuid())
+  username           String   @unique
+  passwordHash       String
+  role               UserRole
+  tenantId           String
+  branchId           String?
+  mustChangePassword Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  tenant Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch Branch? @relation(fields: [branchId], references: [id], onDelete: SetNull)
+
+  wasteLogs              WasteLog[]
+  submittedRequests      ApprovalRequest[] @relation("SubmittedBy")
+  reviewedRequests       ApprovalRequest[] @relation("ReviewedBy")
+  refreshTokens          RefreshToken[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
+}
+
+model InventoryItem {
+  id           String    @id @default(cuid())
+  name         String    // Product name (e.g., "Tomatoes")
+  category     String    // Product category (e.g., "Vegetables")
+  unit         String    // Unit of measurement (e.g., "kg", "pieces")
+  quantity     Float     // Quantity of this specific batch
+  cost         Float     // Cost per unit for this batch
+  supplier     String?   // Supplier for this batch
+  purchaseDate DateTime? // When this batch was purchased
+  expiryDate   DateTime  // When this batch expires
+  location     String?   // Where this batch is stored
+  notes        String?   // Notes for this specific batch
+  batchNumber  String?   // Optional batch/lot number
+  
+  tenantId     String
+  branchId     String
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, branchId])
+  @@index([name, category, unit]) // For aggregating by product
+  @@index([expiryDate])
+  @@index([quantity])
+  @@map("inventory_items")
+}
+
+// Separate table for stock level management per product
+model ProductStockLevel {
+  id              String   @id @default(cuid())
+  productName     String   // Product name (must match InventoryItem.name)
+  category        String   // Product category (must match InventoryItem.category)
+  unit            String   // Unit of measurement (must match InventoryItem.unit)
+  
+  // Stock Management Settings
+  minStockLevel   Float?   @default(0)    // Minimum stock level (reorder point)
+  maxStockLevel   Float?                  // Maximum stock level (prevent overordering)
+  safetyStock     Float?   @default(0)    // Safety buffer above minimum
+  reorderQuantity Float?                  // Suggested reorder quantity
+  leadTimeDays    Int?     @default(1)    // Supplier lead time in days
+  avgDailyUsage   Float?   @default(0)    // Calculated average daily usage
+  isActive        Boolean  @default(true) // Whether item is actively managed
+  trackStock      Boolean  @default(true) // Whether to track stock levels for this product
+  
+  tenantId        String
+  branchId        String?  // null = applies to all branches, specific branchId = branch-specific
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch Branch? @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  
+  // Relations
+  stockAlerts    StockAlert[]
+  usageHistory   StockUsageHistory[]
+
+  @@unique([productName, category, unit, tenantId, branchId]) // One stock level per product per tenant/branch
+  @@index([tenantId, branchId])
+  @@index([productName, category, unit])
+  @@index([isActive, trackStock])
+  @@map("product_stock_levels")
+}
+
+model Recipe {
+  id              String   @id @default(cuid())
+  name            String   // Recipe name (e.g., "Bread", "Chicken Curry")
+  description     String?  // Optional description
+  category        String?  // Recipe category (e.g., "Bakery", "Main Course")
+  yield           Float    // How many units this recipe produces
+  yieldUnit       String   // Unit for yield (e.g., "pieces", "liters", "kg")
+  preparationTime Int?     // Prep time in minutes
+  cookingTime     Int?     // Cooking time in minutes
+  instructions    String[] // Step-by-step instructions
+  notes           String?  // Additional notes
+  costPerUnit     Float?   // Calculated cost per unit produced
+  isActive        Boolean  @default(true)
+  tenantId        String
+  branchId        String?  // null = available to all branches
+  createdBy       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  tenant       Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch       Branch?            @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  ingredients  RecipeIngredient[]
+  productions  Production[]
+  wasteLogs    WasteLog[]
+
+  @@index([tenantId, branchId])
+  @@index([category])
+  @@index([isActive])
+  @@map("recipes")
+}
+
+model RecipeIngredient {
+  id            String   @id @default(cuid())
+  recipeId      String
+  ingredientName String  // Name of the ingredient (must match inventory item name)
+  category      String   // Category (must match inventory category)
+  quantity      Float    // Quantity needed for this recipe
+  unit          String   // Unit of measurement
+  notes         String?  // Optional notes (e.g., "finely chopped", "room temperature")
+  isOptional    Boolean  @default(false) // Whether this ingredient is optional
+  order         Int?     // Order in which to add this ingredient
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  recipe Recipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+
+  @@index([recipeId])
+  @@index([ingredientName, category])
+  @@map("recipe_ingredients")
+}
+
+model Production {
+  id               String             @id @default(cuid())
+  recipeId         String
+  batchNumber      String?            // Optional batch identifier
+  quantityProduced Float              // How many units were actually produced
+  plannedQuantity  Float?             // How many units were planned to be produced
+  unitCost         Float?             // Cost per unit for this production batch
+  totalCost        Float?             // Total cost for this production batch
+  productionDate   DateTime           @default(now()) // When the production happened
+  notes            String?            // Production notes
+  qualityRating    Float?             // Optional quality rating (1-10)
+  status           ProductionStatus   @default(COMPLETED)
+  tenantId         String
+  branchId         String
+  producedBy       String?            // User who produced this batch
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  recipe             Recipe               @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  tenant             Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch             Branch               @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  ingredientUsage    ProductionIngredient[]
+  wasteFromProduction WasteLog[]
+
+  @@index([tenantId, branchId])
+  @@index([recipeId])
+  @@index([productionDate])
+  @@index([status])
+  @@map("productions")
+}
+
+model ProductionIngredient {
+  id           String   @id @default(cuid())
+  productionId String
+  ingredientName String // Name of ingredient used
+  category     String   // Category of ingredient
+  quantityUsed Float    // Actual quantity used from inventory
+  unit         String   // Unit of measurement
+  costUsed     Float?   // Cost of ingredients used
+  inventoryItemIds String[] // IDs of inventory items used (for FIFO tracking)
+  createdAt    DateTime @default(now())
+
+  production Production @relation(fields: [productionId], references: [id], onDelete: Cascade)
+
+  @@index([productionId])
+  @@index([ingredientName, category])
+  @@map("production_ingredients")
+}
+
+enum ProductionStatus {
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+model WasteLog {
+  id           String    @id @default(cuid())
+  itemName     String    // Name of wasted item
+  category     String?   // Category of wasted item
+  quantity     Float     // Quantity wasted
+  unit         String    // Unit of measurement
+  cost         Float     // Cost of waste
+  wasteType    WasteType // RAW (ingredients) or PRODUCT (finished goods)
+  reason       String    // Reason for waste
+  tags         String[]  // Tags for categorization
+  recipeId     String?   // If waste is from a recipe/production
+  productionId String?   // If waste is from a specific production batch
+  location     String?   // Where the waste occurred
+  preventable  Boolean   @default(true) // Whether this waste was preventable
+  severity     WasteSeverity @default(MEDIUM) // Impact level of this waste
+  tenantId     String
+  branchId     String
+  loggedBy     String
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  tenant     Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch     Branch      @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  loggedByUser User      @relation(fields: [loggedBy], references: [id])
+  recipe     Recipe?     @relation(fields: [recipeId], references: [id], onDelete: SetNull)
+  production Production? @relation(fields: [productionId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, branchId])
+  @@index([wasteType])
+  @@index([reason])
+  @@index([preventable])
+  @@index([createdAt])
+  @@map("waste_logs")
+}
+
+model ApprovalRequest {
+  id               String         @id @default(cuid())
+  actionType       ActionType
+  reasonForRequest String
+  originalData     Json
+  proposedData     Json
+  submittedBy      String
+  reviewStatus     ApprovalStatus @default(PENDING)
+  reviewedBy       String?
+  reviewComment    String?
+  tenantId         String
+  branchId         String
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  tenant        Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch        Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  submittedByUser User @relation("SubmittedBy", fields: [submittedBy], references: [id])
+  reviewedByUser  User?  @relation("ReviewedBy", fields: [reviewedBy], references: [id])
+
+  @@index([tenantId, branchId])
+  @@index([reviewStatus])
+  @@index([createdAt])
+  @@map("approval_requests")
+}
+
+// Stock Management Models
+model StockAlert {
+  id               String            @id @default(cuid())
+  stockLevelId     String            // Reference to ProductStockLevel
+  alertType        AlertType
+  currentLevel     Float             // Current total quantity for the product
+  triggerLevel     Float             // The level that triggered the alert
+  message          String
+  isResolved       Boolean           @default(false)
+  resolvedAt       DateTime?
+  resolvedBy       String?
+  tenantId         String
+  branchId         String
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  stockLevel       ProductStockLevel @relation(fields: [stockLevelId], references: [id], onDelete: Cascade)
+  tenant           Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch           Branch            @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, branchId])
+  @@index([alertType, isResolved])
+  @@index([createdAt])
+  @@map("stock_alerts")
+}
+
+model StockUsageHistory {
+  id                   String            @id @default(cuid())
+  stockLevelId         String            // Reference to ProductStockLevel
+  inventoryItemId      String?           // Optional reference to specific batch used
+  usageType            UsageType
+  quantityUsed         Float
+  totalQuantityBefore  Float             // Total quantity for the product before this usage
+  totalQuantityAfter   Float             // Total quantity for the product after this usage
+  cost                 Float?
+  recipeId             String?
+  usedBy               String?
+  reason               String?
+  tenantId             String
+  branchId             String
+  createdAt            DateTime          @default(now())
+
+  stockLevel    ProductStockLevel @relation(fields: [stockLevelId], references: [id], onDelete: Cascade)
+  tenant        Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch        Branch            @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, branchId])
+  @@index([stockLevelId, createdAt])
+  @@index([usageType])
+  @@map("stock_usage_history")
+}
+
+// Stock Management Enums
+enum AlertType {
+  LOW_STOCK
+  OUT_OF_STOCK
+  OVERSTOCKED
+  EXPIRING_SOON
+  EXPIRED
+  REORDER_NEEDED
+}
+
+enum UsageType {
+  RECIPE_CONSUMPTION
+  WASTE_DISPOSAL
+  MANUAL_ADJUSTMENT
+  TRANSFER_OUT
+  TRANSFER_IN
+  EXPIRED_REMOVAL
+  DAMAGE_REMOVAL
+  SALE
+}

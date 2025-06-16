@@ -1,0 +1,32 @@
+{
+  "name": "kitchzero",
+  "private": true,
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev --parallel",
+    "dev:real": "node start-dev.js",
+    "lint": "turbo run lint",
+    "format": "prettier --write \"**/*.{ts,tsx,md}\"",
+    "clean": "turbo run clean && rm -rf node_modules",
+    "db:generate": "turbo run db:generate",
+    "db:push": "turbo run db:push",
+    "db:seed": "turbo run db:seed",
+    "create-tenant": "cd apps/api && npx tsx src/scripts/create-tenant-standalone.ts",
+    "seed-inventory": "cd apps/api && npx tsx src/scripts/seed-inventory-demo.ts",
+    "test-apis": "cd apps/api && npx tsx src/scripts/test-apis.ts",
+    "check-db": "cd apps/api && npx tsx src/scripts/check-db-status.ts",
+    "check-users": "cd apps/api && npx tsx src/scripts/check-users.ts",
+    "reset-password": "cd apps/api && npx tsx src/scripts/reset-password.ts"
+  },
+  "devDependencies": {
+    "@turbo/gen": "^1.12.4",
+    "concurrently": "^8.2.2",
+    "prettier": "^3.2.5",
+    "turbo": "^1.12.4",
+    "typescript": "^5.3.3"
+  },
+  "packageManager": "pnpm@8.15.4",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

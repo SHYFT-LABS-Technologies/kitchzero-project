@@ -1,0 +1,47 @@
+{
+  "name": "@kitchzero/api",
+  "version": "0.1.0",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/index-real.ts",
+    "start": "node dist/index.js",
+    "lint": "eslint src --ext .ts",
+    "clean": "rm -rf dist",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "db:seed": "tsx src/scripts/seed-inventory-demo.ts",
+    "db:migrate": "prisma migrate dev",
+    "db:studio": "prisma studio",
+    "create-tenant": "tsx src/scripts/create-tenant-standalone.ts",
+    "check-users": "tsx src/scripts/check-users.ts",
+    "reset-password": "tsx src/scripts/reset-password.ts"
+  },
+  "dependencies": {
+    "@fastify/cors": "^8.4.2",
+    "@fastify/helmet": "^11.1.1",
+    "@fastify/jwt": "^7.2.4",
+    "@fastify/rate-limit": "^9.1.0",
+    "@prisma/client": "^5.9.1",
+    "bcrypt": "^5.1.1",
+    "commander": "^11.1.0",
+    "dotenv": "^16.4.1",
+    "dotenv-safe": "^8.2.0",
+    "fastify": "^4.26.0",
+    "jsonwebtoken": "^9.0.2",
+    "nanoid": "^5.0.4",
+    "pino": "^8.17.2",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/bcrypt": "^5.0.2",
+    "@types/jsonwebtoken": "^9.0.5",
+    "@types/node": "^20.11.19",
+    "@typescript-eslint/eslint-plugin": "^6.21.0",
+    "@typescript-eslint/parser": "^6.21.0",
+    "eslint": "^8.56.0",
+    "prisma": "^5.9.1",
+    "tsx": "^4.7.1",
+    "typescript": "^5.3.3"
+  }
+}
