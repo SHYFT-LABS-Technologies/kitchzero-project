@@ -7,6 +7,7 @@ import { config } from 'dotenv';
 import { resolve } from 'path';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
+import { JWTPayload } from '@kitchzero/utils';
 
 // Load environment variables
 config({ path: resolve(process.cwd(), '.env') });
@@ -88,7 +89,7 @@ function getIPUserCount(ip: string): number {
 }
 
 // Unit conversion utilities
-const unitConversions = {
+const unitConversions: Record<string, number> = {
   // Weight conversions (to grams as base)
   'mg': 0.001,
   'g': 1,
@@ -154,21 +155,6 @@ const fastify = Fastify({
     level: process.env.LOG_LEVEL || 'info'
   }
 });
-
-// JWT payload interface
-interface JWTPayload {
-  userId: string;
-  username: string;
-  role: string;
-  tenantId: string;
-  branchId?: string;
-}
-
-declare module 'fastify' {
-  interface FastifyRequest {
-    user?: JWTPayload;
-  }
-}
 
 // Authentication middleware
 async function authenticate(request: any, reply: any) {
@@ -238,7 +224,6 @@ async function buildApp() {
       };
     },
     skipOnError: false,
-    skipSuccessfulRequests: false,
     allowList: ['127.0.0.1'] // Allow localhost for development
   });
   
@@ -268,7 +253,7 @@ async function buildApp() {
         retryAfter: context.ttl
       };
     }
-  }, { prefix: '/api/auth/login' });
+  });
 
   // Real authentication endpoints
   fastify.post('/api/auth/login', async (request, reply) => {
