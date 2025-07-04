@@ -43,9 +43,12 @@ export class InventoryService {
       where.unit = filters.unit;
     }
     
-    const page = filters?.page || 1;
-    const limit = filters?.limit || 20;
-    const skip = (page - 1) * limit;
+    const page = filters?.page ? Number(filters.page) : 1;
+    const limit = filters?.limit ? Number(filters.limit) : 20;
+    // Ensure numeric values for pagination
+    const safePage = Number.isFinite(page) && page > 0 ? page : 1;
+    const safeLimit = Number.isFinite(limit) && limit > 0 ? limit : 20;
+    const skip = (safePage - 1) * safeLimit;
     
     let items = await prisma.inventoryItem.findMany({
       where,
@@ -54,7 +57,7 @@ export class InventoryService {
         { createdAt: 'asc' }
       ],
       skip,
-      take: limit
+      take: safeLimit
     });
     
     const total = await prisma.inventoryItem.count({ where });
@@ -78,9 +81,9 @@ export class InventoryService {
     return {
       items: items as InventoryItem[],
       total,
-      page,
-      limit,
-      totalPages: Math.ceil(total / limit)
+      page: safePage,
+      limit: safeLimit,
+      totalPages: Math.ceil(total / safeLimit)
     };
   }
   
