@@ -296,11 +296,24 @@ export function InventoryForm({ initialData, isEditing = false, itemId, onSucces
 
     try {
       setLoading(true);
+      const payload = {
+        ...formData,
+        quantity: formData.quantity ? parseFloat(formData.quantity) : undefined,
+        cost: formData.cost ? parseFloat(formData.cost) : undefined,
+        expiryDate: formData.expiryDate
+          ? new Date(formData.expiryDate).toISOString()
+          : undefined,
+      };
+
       let response;
       if (isEditing) {
-        response = await inventoryApi.updateItem(user!.tenantId, itemId!, formData);
+        response = await inventoryApi.updateItem(user!.tenantId, itemId!, payload);
       } else {
-        response = await inventoryApi.createItem(user!.tenantId, user!.branchId!, formData);
+        response = await inventoryApi.createItem(
+          user!.tenantId,
+          user!.branchId!,
+          payload
+        );
       }
       
       if (response.success) {
