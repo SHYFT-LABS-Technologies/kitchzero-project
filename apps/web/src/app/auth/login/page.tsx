@@ -30,10 +30,12 @@ export default function LoginPage() {
     try {
       const response = await apiClient.login(data);
       
-      if (response.success && response.data) {
-        setUser(response.data.user, response.data.mustChangePassword);
+      if (response.success) {
+        // The API returns { success: true, user, tokens, mustChangePassword? }
+        const { user, mustChangePassword } = response;
+        setUser(user, mustChangePassword || false);
         
-        if (response.data.mustChangePassword) {
+        if (mustChangePassword) {
           setMustChangePassword(true);
           toast.success('Login successful. Please change your password.');
           router.push('/auth/change-password');

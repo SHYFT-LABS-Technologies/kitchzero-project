@@ -38,6 +38,18 @@ importers:
       '@fastify/rate-limit':
         specifier: ^9.1.0
         version: 9.1.0
+      '@kitchzero/config':
+        specifier: workspace:*
+        version: link:../../packages/config
+      '@kitchzero/schemas':
+        specifier: workspace:*
+        version: link:../../packages/schemas
+      '@kitchzero/types':
+        specifier: workspace:*
+        version: link:../../packages/types
+      '@kitchzero/utils':
+        specifier: workspace:*
+        version: link:../../packages/utils
       '@prisma/client':
         specifier: ^5.9.1
         version: 5.22.0(prisma@5.22.0)

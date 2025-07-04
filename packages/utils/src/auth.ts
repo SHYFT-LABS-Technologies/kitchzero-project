@@ -18,8 +18,11 @@ export function generateTokens(
   expiresIn: string = '15m',
   refreshExpiresIn: string = '7d'
 ): AuthTokens {
-  const accessToken = jwt.sign(payload, jwtSecret, { expiresIn } as jwt.SignOptions);
-  const refreshToken = jwt.sign(payload, refreshSecret, { expiresIn: refreshExpiresIn } as jwt.SignOptions);
+  // Add a random jti (JWT ID) to ensure uniqueness
+  const jti = Math.random().toString(36).substring(2) + Date.now().toString(36);
+  
+  const accessToken = jwt.sign(payload, jwtSecret, { expiresIn, jwtid: jti } as jwt.SignOptions);
+  const refreshToken = jwt.sign(payload, refreshSecret, { expiresIn: refreshExpiresIn, jwtid: jti + '_refresh' } as jwt.SignOptions);
   
   return { accessToken, refreshToken };
 }
