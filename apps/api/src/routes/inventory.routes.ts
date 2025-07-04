@@ -131,6 +131,35 @@ export async function inventoryRoutes(fastify: FastifyInstance) {
       });
     }
   });
+
+  fastify.get('/tenants/:tenantId/inventory/:itemId', {
+    preHandler: [
+      authenticate,
+      validateParams(InventoryParamsSchema.extend({ itemId: z.string().min(1) }))
+    ]
+  }, async (request, reply) => {
+    try {
+      const { tenantId, itemId } = request.params as any;
+      const item = await inventoryService.getInventoryItem(itemId, tenantId);
+
+      if (!item) {
+        return reply.status(404).send({
+          success: false,
+          error: 'Inventory item not found'
+        });
+      }
+
+      return reply.status(200).send({
+        success: true,
+        data: item
+      });
+    } catch (error) {
+      return reply.status(400).send({
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to fetch inventory item'
+      });
+    }
+  });
   
   fastify.put('/tenants/:tenantId/inventory/:itemId', {
     preHandler: [

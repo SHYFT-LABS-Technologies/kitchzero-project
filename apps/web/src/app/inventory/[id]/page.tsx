@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { apiClient } from '@/lib/api';
+import { inventoryApi } from '@/lib/api';
+import { useAuthStore } from '@/store/auth';
 import toast from 'react-hot-toast';
 import AppLayout from '@/components/layout/app-layout';
 import { InventoryForm } from '@/components/forms/inventory-form';
@@ -11,6 +12,7 @@ export default function EditInventoryPage() {
   const params = useParams();
   const router = useRouter();
   const id = params.id as string;
+  const { user } = useAuthStore();
   
   const [initialData, setInitialData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -24,7 +26,7 @@ export default function EditInventoryPage() {
   const fetchItem = async () => {
     try {
       setLoading(true);
-      const response = await apiClient.get(`/api/inventory/${id}`);
+      const response = await inventoryApi.getItem(user!.tenantId, id);
       
       if (response.success) {
         const item = response.data;

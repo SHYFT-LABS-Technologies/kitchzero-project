@@ -214,6 +214,8 @@ export const inventoryApi = {
     const queryString = searchParams.toString();
     return apiClient.get(`/api/tenants/${tenantId}/branches/${branchId}/inventory${queryString ? `?${queryString}` : ''}`);
   },
+  getItem: (tenantId: string, itemId: string) =>
+    apiClient.get(`/api/tenants/${tenantId}/inventory/${itemId}`),
   createItem: (tenantId: string, branchId: string, data: any) =>
     apiClient.post(`/api/tenants/${tenantId}/branches/${branchId}/inventory`, data),
   updateItem: (tenantId: string, itemId: string, data: any) =>

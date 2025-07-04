@@ -104,6 +104,12 @@ export class InventoryService {
       }
     });
   }
+
+  async getInventoryItem(id: string, tenantId: string) {
+    return prisma.inventoryItem.findFirst({
+      where: { id, tenantId }
+    });
+  }
   
   async deleteInventoryItem(id: string, tenantId: string) {
     return prisma.inventoryItem.delete({
