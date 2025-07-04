@@ -70,12 +70,20 @@ export async function inventoryRoutes(fastify: FastifyInstance) {
         filters.branchId,
         filters
       );
-      
+
       console.log('✅ Service returned:', { itemCount: result.items?.length });
-      
+
       return reply.status(200).send({
         success: true,
-        data: result
+        data: {
+          items: result.items,
+          pagination: {
+            page: result.page,
+            limit: result.limit,
+            total: result.total,
+            pages: result.totalPages
+          }
+        }
       });
     } catch (error) {
       console.error('❌ Inventory route error:', error);
@@ -103,10 +111,18 @@ export async function inventoryRoutes(fastify: FastifyInstance) {
         branchId,
         filters
       );
-      
+
       return reply.status(200).send({
         success: true,
-        data: result
+        data: {
+          items: result.items,
+          pagination: {
+            page: result.page,
+            limit: result.limit,
+            total: result.total,
+            pages: result.totalPages
+          }
+        }
       });
     } catch (error) {
       return reply.status(400).send({
