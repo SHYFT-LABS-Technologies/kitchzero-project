@@ -3,9 +3,11 @@
 import { useState, useEffect } from 'react';
 import { Plus, Search, Filter, Package, AlertTriangle, Clock, Settings } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { apiClient } from '@/lib/api';
+import { apiClient, inventoryApi } from '@/lib/api';
+import { useAuthStore } from '@/store/auth';
 import toast from 'react-hot-toast';
 import AppLayout from '@/components/layout/app-layout';
+import { useCurrency } from '@/context/settings-context';
 
 interface InventoryItem {
   id: string;
@@ -32,6 +34,7 @@ interface Pagination {
 
 export default function InventoryPage() {
   const router = useRouter();
+  const { user } = useAuthStore();
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [pagination, setPagination] = useState<Pagination>({
@@ -44,20 +47,23 @@ export default function InventoryPage() {
   const [selectedCategory, setSelectedCategory] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('');
   const [categories, setCategories] = useState<string[]>([]);
+  const { formatCurrency } = useCurrency();
 
   const fetchInventory = async (page = 1) => {
+    if (!user?.tenantId) return;
+    
     try {
       setLoading(true);
-      const params = new URLSearchParams({
+      const params: Record<string, string> = {
         page: page.toString(),
         limit: '20'
-      });
+      };
 
-      if (searchTerm) params.append('search', searchTerm);
-      if (selectedCategory) params.append('category', selectedCategory);
-      if (selectedStatus) params.append('status', selectedStatus);
+      if (searchTerm) params['search'] = searchTerm;
+      if (selectedCategory) params['category'] = selectedCategory;
+      if (selectedStatus) params['status'] = selectedStatus;
 
-      const response = await apiClient.get(`/api/inventory?${params}`);
+      const response = await inventoryApi.getItems(user.tenantId, params);
       
       if (response.success) {
         setItems(response.data.items);
@@ -74,10 +80,14 @@ export default function InventoryPage() {
   };
 
   const fetchCategories = async () => {
+    if (!user?.tenantId) return;
+    
     try {
-      const response = await apiClient.get('/api/inventory/categories');
+      // Get categories from inventory items for now
+      const response = await inventoryApi.getItems(user.tenantId, { limit: '1000' });
       if (response.success) {
-        setCategories(response.data);
+        const uniqueCategories = [...new Set(response.data.items.map((item: any) => item.category))].sort();
+        setCategories(uniqueCategories);
       }
     } catch (error) {
       console.error('Categories fetch error:', error);
@@ -85,15 +95,17 @@ export default function InventoryPage() {
   };
 
   useEffect(() => {
-    fetchInventory();
-    fetchCategories();
-  }, [searchTerm, selectedCategory, selectedStatus]);
+    if (user?.tenantId) {
+      fetchInventory();
+      fetchCategories();
+    }
+  }, [user?.tenantId, searchTerm, selectedCategory, selectedStatus]);
 
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this item?')) return;
 
     try {
-      const response = await apiClient.delete(`/api/inventory/${id}`);
+      const response = await inventoryApi.deleteItem(user.tenantId, id);
       if (response.success) {
         toast.success('Item deleted successfully');
         fetchInventory(pagination.page);
@@ -151,13 +163,7 @@ export default function InventoryPage() {
     });
   };
 
-  const formatCurrency = (amount: number) => {
-    if (amount === null || amount === undefined) return '$0.00';
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD'
-    }).format(amount);
-  };
+  // formatCurrency now comes from useCurrency hook
 
   const formatQuantity = (quantity: number, unit: string) => {
     if (quantity === null || quantity === undefined) return 'N/A';

@@ -55,8 +55,45 @@ model Tenant {
   approvalRequests   ApprovalRequest[]
   stockAlerts        StockAlert[]
   stockUsageHistory  StockUsageHistory[]
+  settings           TenantSettings?
 
   @@map("tenants")
+}
+
+model TenantSettings {
+  id                    String   @id @default(cuid())
+  tenantId              String   @unique
+  
+  // General Settings
+  currency              String   @default("LKR")
+  currencySymbol        String   @default("Rs.")
+  timezone              String   @default("Asia/Colombo")
+  dateFormat            String   @default("DD/MM/YYYY")
+  language              String   @default("en")
+  
+  // Business Information
+  businessName          String?
+  businessAddress       String?
+  businessPhone         String?
+  businessEmail         String?
+  taxRate               Float    @default(8.0)
+  
+  // Notification Preferences
+  notificationEmail     Boolean  @default(true)
+  notificationSms       Boolean  @default(false)
+  
+  // Alert Thresholds
+  lowStockThreshold     Int      @default(10)
+  wasteAlertThreshold   Int      @default(50)
+  
+  // Timestamps
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  // Relations
+  tenant                Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("tenant_settings")
 }
 
 model Branch {

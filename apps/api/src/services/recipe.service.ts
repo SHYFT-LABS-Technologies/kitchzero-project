@@ -1,235 +1,456 @@
-import { prisma } from '../lib/prisma';
-import { Recipe, RecipeItem, InventoryUnit } from '@kitchzero/types';
-import { calculateCostPerUnit } from '@kitchzero/utils';
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
+
+export interface CreateRecipeData {
+  name: string;
+  description?: string;
+  category?: string;
+  yield: number;
+  yieldUnit: string;
+  preparationTime?: number;
+  cookingTime?: number;
+  instructions?: string[];
+  notes?: string;
+  tenantId: string;
+  branchId?: string;
+  createdBy?: string;
+  ingredients: {
+    ingredientName: string;
+    category: string;
+    quantity: number;
+    unit: string;
+    notes?: string;
+    isOptional?: boolean;
+    order?: number;
+  }[];
+}
+
+export interface UpdateRecipeData {
+  name?: string;
+  description?: string;
+  category?: string;
+  yield?: number;
+  yieldUnit?: string;
+  preparationTime?: number;
+  cookingTime?: number;
+  instructions?: string[];
+  notes?: string;
+  isActive?: boolean;
+  ingredients?: {
+    id?: string;
+    ingredientName: string;
+    category: string;
+    quantity: number;
+    unit: string;
+    notes?: string;
+    isOptional?: boolean;
+    order?: number;
+  }[];
+}
 
 export class RecipeService {
-  async createRecipe(data: {
-    productName: string;
-    portionSize: number;
-    tenantId: string;
-    ingredients: Array<{
-      itemName: string;
-      quantity: number;
-      unit: InventoryUnit;
-    }>;
-  }) {
-    return prisma.$transaction(async (tx) => {
-      const recipe = await tx.recipe.create({
-        data: {
-          productName: data.productName,
-          portionSize: data.portionSize,
-          tenantId: data.tenantId
-        }
-      });
-      
-      const ingredients = await Promise.all(
-        data.ingredients.map(ingredient =>
-          tx.recipeItem.create({
-            data: {
-              recipeId: recipe.id,
-              itemName: ingredient.itemName,
-              quantity: ingredient.quantity,
-              unit: ingredient.unit
-            }
-          })
-        )
-      );
-      
-      return { ...recipe, ingredients };
-    });
-  }
-  
-  async getRecipes(tenantId: string) {
-    return prisma.recipe.findMany({
-      where: { tenantId },
-      include: {
-        ingredients: true,
-        _count: {
-          select: { wasteLogs: true }
+  /**
+   * Create a new recipe with ingredients
+   */
+  async createRecipe(data: CreateRecipeData) {
+    // Calculate cost per unit based on ingredient costs
+    const costPerUnit = await this.calculateRecipeCost(data.ingredients, data.tenantId, data.branchId);
+
+    return prisma.recipe.create({
+      data: {
+        name: data.name,
+        description: data.description,
+        category: data.category,
+        yield: data.yield,
+        yieldUnit: data.yieldUnit,
+        preparationTime: data.preparationTime,
+        cookingTime: data.cookingTime,
+        instructions: data.instructions || [],
+        notes: data.notes,
+        costPerUnit,
+        tenantId: data.tenantId,
+        branchId: data.branchId,
+        createdBy: data.createdBy,
+        ingredients: {
+          create: data.ingredients.map((ingredient, index) => ({
+            ingredientName: ingredient.ingredientName,
+            category: ingredient.category,
+            quantity: ingredient.quantity,
+            unit: ingredient.unit,
+            notes: ingredient.notes,
+            isOptional: ingredient.isOptional || false,
+            order: ingredient.order || index + 1
+          }))
         }
       },
-      orderBy: { productName: 'asc' }
-    });
-  }
-  
-  async getRecipeById(id: string, tenantId: string) {
-    const recipe = await prisma.recipe.findFirst({
-      where: { id, tenantId },
       include: {
-        ingredients: true,
-        wasteLogs: {
-          take: 10,
-          orderBy: { createdAt: 'desc' }
+        ingredients: {
+          orderBy: { order: 'asc' }
+        },
+        branch: {
+          select: { name: true }
         }
       }
     });
-    
+  }
+
+  /**
+   * Get all recipes for a tenant/branch
+   */
+  async getRecipes(tenantId: string, branchId?: string, filters?: {
+    category?: string;
+    search?: string;
+    isActive?: boolean;
+    page?: number;
+    limit?: number;
+  }) {
+    const where: any = { tenantId };
+
+    // Branch filtering
+    if (branchId) {
+      where.OR = [
+        { branchId: branchId },
+        { branchId: null } // Include recipes available to all branches
+      ];
+    }
+
+    // Apply filters
+    if (filters?.category) {
+      where.category = filters.category;
+    }
+
+    if (filters?.search) {
+      where.OR = [
+        { name: { contains: filters.search, mode: 'insensitive' } },
+        { description: { contains: filters.search, mode: 'insensitive' } },
+        { ingredients: { some: { ingredientName: { contains: filters.search, mode: 'insensitive' } } } }
+      ];
+    }
+
+    if (filters?.isActive !== undefined) {
+      where.isActive = filters.isActive;
+    }
+
+    // Pagination
+    const page = filters?.page || 1;
+    const limit = filters?.limit || 20;
+    const skip = (page - 1) * limit;
+
+    const [recipes, total] = await Promise.all([
+      prisma.recipe.findMany({
+        where,
+        include: {
+          ingredients: {
+            orderBy: { order: 'asc' }
+          },
+          branch: {
+            select: { name: true }
+          },
+          _count: {
+            select: {
+              productions: true
+            }
+          }
+        },
+        orderBy: [
+          { isActive: 'desc' },
+          { createdAt: 'desc' }
+        ],
+        skip,
+        take: limit
+      }),
+      prisma.recipe.count({ where })
+    ]);
+
+    return {
+      recipes,
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit)
+      }
+    };
+  }
+
+  /**
+   * Get a single recipe by ID
+   */
+  async getRecipeById(id: string, tenantId: string, branchId?: string) {
+    const where: any = { id, tenantId };
+
+    if (branchId) {
+      where.OR = [
+        { branchId: branchId },
+        { branchId: null }
+      ];
+    }
+
+    const recipe = await prisma.recipe.findFirst({
+      where,
+      include: {
+        ingredients: {
+          orderBy: { order: 'asc' }
+        },
+        branch: {
+          select: { name: true }
+        },
+        productions: {
+          take: 5,
+          orderBy: { createdAt: 'desc' },
+          select: {
+            id: true,
+            quantityProduced: true,
+            productionDate: true,
+            status: true,
+            totalCost: true
+          }
+        },
+        _count: {
+          select: {
+            productions: true
+          }
+        }
+      }
+    });
+
     if (!recipe) {
       throw new Error('Recipe not found');
     }
-    
+
     return recipe;
   }
-  
-  async updateRecipe(
-    id: string,
-    data: {
-      productName?: string;
-      portionSize?: number;
-      ingredients?: Array<{
-        itemName: string;
-        quantity: number;
-        unit: InventoryUnit;
-      }>;
-    },
-    tenantId: string
-  ) {
+
+  /**
+   * Update a recipe
+   */
+  async updateRecipe(id: string, data: UpdateRecipeData, tenantId: string) {
+    const existingRecipe = await prisma.recipe.findFirst({
+      where: { id, tenantId },
+      include: { ingredients: true }
+    });
+
+    if (!existingRecipe) {
+      throw new Error('Recipe not found');
+    }
+
+    // Calculate new cost if ingredients are being updated
+    let costPerUnit = existingRecipe.costPerUnit;
+    if (data.ingredients) {
+      costPerUnit = await this.calculateRecipeCost(
+        data.ingredients as any,
+        tenantId,
+        existingRecipe.branchId
+      );
+    }
+
     return prisma.$transaction(async (tx) => {
-      const recipe = await tx.recipe.update({
-        where: { id, tenantId },
+      // Update recipe
+      const updatedRecipe = await tx.recipe.update({
+        where: { id },
         data: {
-          productName: data.productName,
-          portionSize: data.portionSize
+          name: data.name,
+          description: data.description,
+          category: data.category,
+          yield: data.yield,
+          yieldUnit: data.yieldUnit,
+          preparationTime: data.preparationTime,
+          cookingTime: data.cookingTime,
+          instructions: data.instructions,
+          notes: data.notes,
+          costPerUnit,
+          isActive: data.isActive
         }
       });
-      
+
+      // Update ingredients if provided
       if (data.ingredients) {
-        await tx.recipeItem.deleteMany({
+        // Delete existing ingredients
+        await tx.recipeIngredient.deleteMany({
           where: { recipeId: id }
         });
-        
-        const ingredients = await Promise.all(
-          data.ingredients.map(ingredient =>
-            tx.recipeItem.create({
-              data: {
-                recipeId: id,
-                itemName: ingredient.itemName,
-                quantity: ingredient.quantity,
-                unit: ingredient.unit
-              }
-            })
-          )
-        );
-        
-        return { ...recipe, ingredients };
+
+        // Create new ingredients
+        await tx.recipeIngredient.createMany({
+          data: data.ingredients.map((ingredient, index) => ({
+            recipeId: id,
+            ingredientName: ingredient.ingredientName,
+            category: ingredient.category,
+            quantity: ingredient.quantity,
+            unit: ingredient.unit,
+            notes: ingredient.notes,
+            isOptional: ingredient.isOptional || false,
+            order: ingredient.order || index + 1
+          }))
+        });
       }
-      
-      const ingredients = await tx.recipeItem.findMany({
-        where: { recipeId: id }
+
+      return tx.recipe.findUnique({
+        where: { id },
+        include: {
+          ingredients: {
+            orderBy: { order: 'asc' }
+          },
+          branch: {
+            select: { name: true }
+          }
+        }
       });
-      
-      return { ...recipe, ingredients };
     });
   }
-  
+
+  /**
+   * Delete a recipe
+   */
   async deleteRecipe(id: string, tenantId: string) {
-    return prisma.$transaction(async (tx) => {
-      await tx.recipeItem.deleteMany({
-        where: { recipeId: id }
-      });
-      
-      await tx.recipe.delete({
-        where: { id, tenantId }
-      });
+    const recipe = await prisma.recipe.findFirst({
+      where: { id, tenantId },
+      include: { productions: true }
+    });
+
+    if (!recipe) {
+      throw new Error('Recipe not found');
+    }
+
+    if (recipe.productions.length > 0) {
+      throw new Error('Cannot delete recipe that has production history. Consider deactivating instead.');
+    }
+
+    return prisma.recipe.delete({
+      where: { id }
     });
   }
-  
-  async calculateRecipeCost(
-    recipeId: string,
+
+  /**
+   * Get recipe categories for a tenant
+   */
+  async getRecipeCategories(tenantId: string, branchId?: string) {
+    const where: any = { tenantId, isActive: true };
+
+    if (branchId) {
+      where.OR = [
+        { branchId: branchId },
+        { branchId: null }
+      ];
+    }
+
+    const categories = await prisma.recipe.findMany({
+      where,
+      select: { category: true },
+      distinct: ['category']
+    });
+
+    return categories
+      .map(c => c.category)
+      .filter(Boolean)
+      .sort();
+  }
+
+  /**
+   * Calculate recipe cost based on current ingredient prices
+   */
+  private async calculateRecipeCost(
+    ingredients: { ingredientName: string; category: string; quantity: number; unit: string }[],
     tenantId: string,
     branchId?: string
-  ): Promise<{
-    totalCost: number;
-    costPerPortion: number;
-    ingredientCosts: Array<{
-      itemName: string;
-      quantity: number;
-      unit: InventoryUnit;
-      costPerUnit: number;
-      totalCost: number;
-    }>;
-  }> {
-    const recipe = await this.getRecipeById(recipeId, tenantId);
-    
-    const ingredientCosts = await Promise.all(
-      recipe.ingredients.map(async (ingredient) => {
-        const inventory = await prisma.inventoryItem.findMany({
-          where: {
-            itemName: ingredient.itemName,
-            unit: ingredient.unit,
-            tenantId,
-            ...(branchId && { branchId }),
-            quantity: { gt: 0 }
-          }
-        });
-        
-        const costPerUnit = calculateCostPerUnit(
-          inventory as any[],
-          ingredient.itemName,
-          ingredient.unit
-        );
-        
-        const totalCost = costPerUnit * ingredient.quantity;
-        
-        return {
-          itemName: ingredient.itemName,
-          quantity: ingredient.quantity,
-          unit: ingredient.unit,
-          costPerUnit,
-          totalCost
-        };
-      })
-    );
-    
-    const totalCost = ingredientCosts.reduce((sum, item) => sum + item.totalCost, 0);
-    const costPerPortion = recipe.portionSize > 0 ? totalCost / recipe.portionSize : 0;
-    
-    return {
-      totalCost,
-      costPerPortion,
-      ingredientCosts
-    };
-  }
-  
-  async getRecipesByIngredient(
-    itemName: string,
-    tenantId: string
-  ): Promise<Recipe[]> {
-    const recipes = await prisma.recipe.findMany({
-      where: {
+  ): Promise<number> {
+    let totalCost = 0;
+
+    for (const ingredient of ingredients) {
+      // Get the average cost of this ingredient from recent inventory items
+      const where: any = {
         tenantId,
-        ingredients: {
-          some: {
-            itemName: {
-              contains: itemName,
-              mode: 'insensitive'
-            }
-          }
-        }
-      },
-      include: {
-        ingredients: true
+        name: ingredient.ingredientName,
+        category: ingredient.category,
+        quantity: { gt: 0 }
+      };
+
+      if (branchId) {
+        where.branchId = branchId;
       }
-    });
-    
-    return recipes as Recipe[];
+
+      const recentItems = await prisma.inventoryItem.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        take: 5, // Take average of last 5 purchases
+        select: { cost: true, unit: true }
+      });
+
+      if (recentItems.length > 0) {
+        // Calculate average cost per unit
+        const avgCost = recentItems.reduce((sum, item) => sum + item.cost, 0) / recentItems.length;
+        
+        // Assume units match for simplicity (in real app, you'd need unit conversion)
+        const ingredientCost = avgCost * ingredient.quantity;
+        totalCost += ingredientCost;
+      }
+    }
+
+    return totalCost;
   }
-  
-  async getPopularRecipes(tenantId: string, limit: number = 10) {
-    return prisma.recipe.findMany({
-      where: { tenantId },
-      include: {
-        ingredients: true,
-        _count: {
-          select: { wasteLogs: true }
-        }
-      },
-      orderBy: {
-        wasteLogs: {
-          _count: 'desc'
-        }
-      },
-      take: limit
+
+  /**
+   * Check ingredient availability for a recipe
+   */
+  async checkIngredientAvailability(recipeId: string, tenantId: string, branchId?: string, multiplier: number = 1) {
+    const recipe = await prisma.recipe.findFirst({
+      where: { id: recipeId, tenantId },
+      include: { ingredients: true }
     });
+
+    if (!recipe) {
+      throw new Error('Recipe not found');
+    }
+
+    const availability = [];
+
+    for (const ingredient of recipe.ingredients) {
+      const requiredQuantity = ingredient.quantity * multiplier;
+
+      const where: any = {
+        tenantId,
+        name: ingredient.ingredientName,
+        category: ingredient.category,
+        quantity: { gt: 0 }
+      };
+
+      if (branchId) {
+        where.branchId = branchId;
+      }
+
+      const availableItems = await prisma.inventoryItem.findMany({
+        where,
+        orderBy: { expiryDate: 'asc' }, // FIFO order
+        select: { id: true, quantity: true, expiryDate: true }
+      });
+
+      const totalAvailable = availableItems.reduce((sum, item) => sum + item.quantity, 0);
+
+      availability.push({
+        ingredientName: ingredient.ingredientName,
+        category: ingredient.category,
+        required: requiredQuantity,
+        available: totalAvailable,
+        sufficient: totalAvailable >= requiredQuantity,
+        shortage: Math.max(0, requiredQuantity - totalAvailable),
+        unit: ingredient.unit,
+        isOptional: ingredient.isOptional
+      });
+    }
+
+    return {
+      recipe: {
+        id: recipe.id,
+        name: recipe.name,
+        yield: recipe.yield,
+        yieldUnit: recipe.yieldUnit
+      },
+      multiplier,
+      expectedYield: recipe.yield * multiplier,
+      availability,
+      canProduce: availability.every(item => item.sufficient || item.isOptional),
+      missingIngredients: availability.filter(item => !item.sufficient && !item.isOptional)
+    };
   }
 }

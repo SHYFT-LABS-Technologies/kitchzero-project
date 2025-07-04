@@ -70,11 +70,17 @@ export const CreateRecipeSchema = z.object({
 
 export const CreateWasteLogSchema = z.object({
   itemName: z.string().min(1).max(100),
+  category: z.string().min(1).max(100).optional(),
   quantity: z.number().positive(),
-  unit: InventoryUnitSchema,
+  unit: z.string().min(1).max(50),
   wasteType: WasteTypeSchema,
   reason: z.string().min(1).max(500),
-  recipeId: z.string().uuid().optional()
+  tags: z.array(z.string()).optional(),
+  recipeId: z.string().uuid().optional(),
+  productionId: z.string().uuid().optional(),
+  location: z.string().min(1).max(200).optional(),
+  preventable: z.boolean().optional(),
+  severity: z.enum(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']).optional()
 });
 
 export const CreateApprovalRequestSchema = z.object({
@@ -102,7 +108,11 @@ export const DateRangeSchema = z.object({
 export const WasteLogFiltersSchema = z.object({
   wasteType: WasteTypeSchema.optional(),
   tags: z.array(z.string()).optional(),
-  branchId: z.string().uuid().optional()
+  branchId: z.string().uuid().optional(),
+  search: z.string().optional(),
+  preventable: z.string().optional(), // "true", "false", or undefined
+  severity: z.enum(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']).optional(),
+  days: z.string().optional() // Convert to number in route
 }).merge(DateRangeSchema).merge(PaginationSchema);
 
 export const InventoryFiltersSchema = z.object({

@@ -9,6 +9,8 @@ import { inventoryRoutes } from './routes/inventory.routes';
 import { recipeRoutes } from './routes/recipe.routes';
 import { wasteRoutes } from './routes/waste.routes';
 import { approvalRoutes } from './routes/approval.routes';
+import { dashboardRoutes } from './routes/dashboard.routes';
+import { settingsRoutes } from './routes/settings.routes';
 
 const fastify = Fastify({
   logger: {
@@ -30,10 +32,7 @@ async function buildApp() {
     secret: env.JWT_SECRET
   });
   
-  await fastify.register(rateLimit, {
-    max: env.RATE_LIMIT_MAX_REQUESTS,
-    timeWindow: env.RATE_LIMIT_WINDOW_MS
-  });
+  // Remove global rate limiting - we'll apply it only to specific routes that need it
   
   fastify.get('/health', async () => {
     return { 
@@ -74,6 +73,8 @@ async function buildApp() {
   await fastify.register(recipeRoutes, { prefix: '/api' });
   await fastify.register(wasteRoutes, { prefix: '/api' });
   await fastify.register(approvalRoutes, { prefix: '/api' });
+  await fastify.register(dashboardRoutes, { prefix: '/api' });
+  await fastify.register(settingsRoutes, { prefix: '/api' });
   
   return fastify;
 }

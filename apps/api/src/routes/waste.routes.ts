@@ -20,7 +20,7 @@ const WasteStatsQuerySchema = z.object({
   branchId: z.string().uuid().optional(),
   startDate: z.string().datetime().optional(),
   endDate: z.string().datetime().optional(),
-  days: z.number().int().positive().optional()
+  days: z.string().optional() // Will be converted to number in handler
 });
 
 export async function wasteRoutes(fastify: FastifyInstance) {
@@ -75,7 +75,29 @@ export async function wasteRoutes(fastify: FastifyInstance) {
       if (filters.startDate) filters.startDate = new Date(filters.startDate);
       if (filters.endDate) filters.endDate = new Date(filters.endDate);
       
-      const result = await wasteService.getWasteLogs(tenantId, filters);
+      // Handle days parameter
+      if (filters.days && !filters.startDate && !filters.endDate) {
+        const endDate = new Date();
+        const startDate = new Date();
+        startDate.setDate(startDate.getDate() - parseInt(filters.days));
+        filters.startDate = startDate;
+        filters.endDate = endDate;
+      }
+
+      // Convert page and limit to numbers
+      if (filters.page) filters.page = parseInt(filters.page);
+      if (filters.limit) filters.limit = parseInt(filters.limit);
+
+      // Convert preventable string to boolean
+      if (filters.preventable === 'true') {
+        filters.preventable = true;
+      } else if (filters.preventable === 'false') {
+        filters.preventable = false;
+      } else {
+        delete filters.preventable;
+      }
+      
+      const result = await wasteService.getWasteLogs(tenantId, filters.branchId, filters);
       
       return reply.status(200).send({
         success: true,
@@ -104,7 +126,29 @@ export async function wasteRoutes(fastify: FastifyInstance) {
       if (filters.startDate) filters.startDate = new Date(filters.startDate);
       if (filters.endDate) filters.endDate = new Date(filters.endDate);
       
-      const result = await wasteService.getWasteLogs(tenantId, filters);
+      // Handle days parameter
+      if (filters.days && !filters.startDate && !filters.endDate) {
+        const endDate = new Date();
+        const startDate = new Date();
+        startDate.setDate(startDate.getDate() - parseInt(filters.days));
+        filters.startDate = startDate;
+        filters.endDate = endDate;
+      }
+
+      // Convert page and limit to numbers
+      if (filters.page) filters.page = parseInt(filters.page);
+      if (filters.limit) filters.limit = parseInt(filters.limit);
+
+      // Convert preventable string to boolean
+      if (filters.preventable === 'true') {
+        filters.preventable = true;
+      } else if (filters.preventable === 'false') {
+        filters.preventable = false;
+      } else {
+        delete filters.preventable;
+      }
+      
+      const result = await wasteService.getWasteLogs(tenantId, filters.branchId, filters);
       
       return reply.status(200).send({
         success: true,
@@ -220,20 +264,27 @@ export async function wasteRoutes(fastify: FastifyInstance) {
   }, async (request, reply) => {
     try {
       const { tenantId } = request.params as any;
-      const { branchId, startDate, endDate } = request.query as any;
+      const { branchId, startDate, endDate, days } = request.query as any;
       
       const userBranchId = request.user!.role === 'BRANCH_ADMIN' ? request.user!.branchId : branchId;
       
-      const dateRange = (startDate && endDate) ? {
-        startDate: new Date(startDate),
-        endDate: new Date(endDate)
-      } : undefined;
+      let dateFrom: Date | undefined;
+      let dateTo: Date | undefined;
       
-      const stats = await wasteService.getWasteStats(tenantId, userBranchId, dateRange);
+      if (startDate && endDate) {
+        dateFrom = new Date(startDate);
+        dateTo = new Date(endDate);
+      } else if (days) {
+        dateTo = new Date();
+        dateFrom = new Date();
+        dateFrom.setDate(dateFrom.getDate() - parseInt(days));
+      }
+      
+      const analytics = await wasteService.getWasteAnalytics(tenantId, userBranchId, dateFrom, dateTo);
       
       return reply.status(200).send({
         success: true,
-        data: stats
+        data: analytics
       });
     } catch (error) {
       return reply.status(400).send({
