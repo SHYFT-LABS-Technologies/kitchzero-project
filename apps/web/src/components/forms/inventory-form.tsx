@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Save, Trash2, Package, DollarSign, Calendar, MapPin, BarChart3, Settings } from 'lucide-react';
-import { apiClient } from '@/lib/api';
+import { apiClient, inventoryApi } from '@/lib/api';
+import { useAuthStore } from '@/store/auth';
 import toast from 'react-hot-toast';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
@@ -35,6 +36,7 @@ interface InventoryFormProps {
 
 export function InventoryForm({ initialData, isEditing = false, itemId, onSuccess }: InventoryFormProps) {
   const router = useRouter();
+  const { user } = useAuthStore();
   const [formData, setFormData] = useState<InventoryFormData>({
     name: '',
     category: '',
@@ -294,11 +296,12 @@ export function InventoryForm({ initialData, isEditing = false, itemId, onSucces
 
     try {
       setLoading(true);
-      
-      const endpoint = isEditing ? `/api/inventory/${itemId}` : '/api/inventory';
-      const method = isEditing ? 'put' : 'post';
-      
-      const response = await apiClient[method](endpoint, formData);
+      let response;
+      if (isEditing) {
+        response = await inventoryApi.updateItem(user!.tenantId, itemId!, formData);
+      } else {
+        response = await inventoryApi.createItem(user!.tenantId, user!.branchId!, formData);
+      }
       
       if (response.success) {
         toast.success(isEditing ? 'Item updated successfully' : 'Item added successfully');
@@ -330,7 +333,7 @@ export function InventoryForm({ initialData, isEditing = false, itemId, onSucces
 
     try {
       setLoading(true);
-      const response = await apiClient.delete(`/api/inventory/${itemId}`);
+      const response = await inventoryApi.deleteItem(user!.tenantId, itemId);
       
       if (response.success) {
         toast.success('Item deleted successfully');

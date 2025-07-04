@@ -205,25 +205,25 @@ export const inventoryApi = {
   getItems: (tenantId: string, params?: Record<string, any>) => {
     const searchParams = new URLSearchParams(params || {});
     const queryString = searchParams.toString();
-    const url = `/api/inventory${queryString ? `?${queryString}` : ''}`;
+    const url = `/api/tenants/${tenantId}/inventory${queryString ? `?${queryString}` : ''}`;
     console.log('🌐 API request URL:', url);
     return apiClient.get(url);
   },
   getItemsByBranch: (tenantId: string, branchId: string, params?: Record<string, any>) => {
     const searchParams = new URLSearchParams(params || {});
     const queryString = searchParams.toString();
-    return apiClient.get(`/api/inventory${queryString ? `?${queryString}` : ''}`);
+    return apiClient.get(`/api/tenants/${tenantId}/branches/${branchId}/inventory${queryString ? `?${queryString}` : ''}`);
   },
-  createItem: (tenantId: string, branchId: string, data: any) => 
-    apiClient.post(`/api/inventory`, data),
-  updateItem: (tenantId: string, itemId: string, data: any) => 
-    apiClient.put(`/api/inventory/${itemId}`, data),
-  deleteItem: (tenantId: string, itemId: string) => 
-    apiClient.delete(`/api/inventory/${itemId}`),
-  getStats: (tenantId: string) => 
+  createItem: (tenantId: string, branchId: string, data: any) =>
+    apiClient.post(`/api/tenants/${tenantId}/branches/${branchId}/inventory`, data),
+  updateItem: (tenantId: string, itemId: string, data: any) =>
+    apiClient.put(`/api/tenants/${tenantId}/inventory/${itemId}`, data),
+  deleteItem: (tenantId: string, itemId: string) =>
+    apiClient.delete(`/api/tenants/${tenantId}/inventory/${itemId}`),
+  getStats: (tenantId: string) =>
     apiClient.get(`/api/tenants/${tenantId}/inventory/stats`),
-  // Stock Management endpoints  
-  getStockManagement: (tenantId: string) => 
+  // Stock Management endpoints
+  getStockManagement: (tenantId: string) =>
     apiClient.get(`/api/tenants/${tenantId}/inventory/stock-management`),
   updateStockLevels: (tenantId: string, productName: string, category: string, unit: string, data: any) => 
     apiClient.put(`/api/tenants/${tenantId}/products/${encodeURIComponent(productName)}/${encodeURIComponent(category)}/${encodeURIComponent(unit)}/stock-levels`, data),
