@@ -112,11 +112,11 @@ class ApiClient {
     return this.request<T>(endpoint, { method: 'DELETE' });
   }
 
-  async login(credentials: LoginRequest): Promise<ApiResponse<{ user: any; tokens: AuthTokens; mustChangePassword?: boolean }>> {
-    const response = await this.post<ApiResponse<{ user: any; tokens: AuthTokens; mustChangePassword?: boolean }>>('/api/auth/login', credentials);
+  async login(credentials: LoginRequest): Promise<{ success: boolean; user: any; tokens: AuthTokens; mustChangePassword?: boolean }> {
+    const response = await this.post<{ success: boolean; user: any; tokens: AuthTokens; mustChangePassword?: boolean }>('/api/auth/login', credentials);
     
-    if (response.success && response.data) {
-      this.setTokens(response.data.tokens);
+    if (response.success && response.tokens) {
+      this.setTokens(response.tokens);
     }
     
     return response;

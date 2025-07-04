@@ -12,7 +12,14 @@
     "resolveJsonModule": true,
     "declaration": false,
     "experimentalDecorators": true,
-    "emitDecoratorMetadata": true
+    "emitDecoratorMetadata": true,
+    "baseUrl": "./src",
+    "paths": {
+      "@kitchzero/config": ["../../packages/config/src"],
+      "@kitchzero/utils": ["../../packages/utils/src"],
+      "@kitchzero/types": ["../../packages/types/src"],
+      "@kitchzero/schemas": ["../../packages/schemas/src"]
+    }
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]
