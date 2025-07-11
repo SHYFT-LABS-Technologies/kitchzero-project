@@ -14,7 +14,7 @@ async function authenticate(request: any, reply: any) {
 
 export async function dashboardRoutes(fastify: FastifyInstance) {
   // Get dashboard statistics for a tenant
-  fastify.get('/api/tenants/:tenantId/dashboard/stats', {
+  fastify.get('/tenants/:tenantId/dashboard/stats', {
     preHandler: [authenticate]
   }, async (request, reply) => {
     try {
@@ -142,7 +142,7 @@ export async function dashboardRoutes(fastify: FastifyInstance) {
   });
 
   // Get recent activity for dashboard
-  fastify.get('/api/tenants/:tenantId/dashboard/activity', {
+  fastify.get('/tenants/:tenantId/dashboard/activity', {
     preHandler: [authenticate]
   }, async (request, reply) => {
     try {
@@ -214,7 +214,7 @@ export async function dashboardRoutes(fastify: FastifyInstance) {
   });
 
   // Get top waste items for dashboard
-  fastify.get('/api/tenants/:tenantId/dashboard/waste-items', {
+  fastify.get('/tenants/:tenantId/dashboard/waste-items', {
     preHandler: [authenticate]
   }, async (request, reply) => {
     try {
